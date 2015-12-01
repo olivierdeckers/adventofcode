@@ -1,6 +1,4 @@
 import Data.String (String)
-import Data.List (findIndex)
-import Control.Monad (liftM2)
 
 main :: IO ()
 main = do
