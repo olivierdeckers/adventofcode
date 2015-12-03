@@ -11,3 +11,6 @@ step1 str = foldl f 0 str
   f :: Int -> Char -> Int
   f a '(' = a+1
   f a ')' = a-1
+
+step1' :: String -> Int
+step1' s = sum [if x == '(' then 1 else -1 | x <- s]
