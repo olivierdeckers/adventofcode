@@ -1,20 +1,20 @@
 import Data.String
 import Data.List
 import Text.Regex
-import Data.Matrix
+import qualified Data.Map.Strict as M
 import AdventCommon
 
 type Pos = (Int,Int)
-type Field = Matrix Int
+type Field = M.Map Pos Bool
 
 main = do
-  reverseLines <- readLines
-  let lines = reverse reverseLines
+  reversedLines <- readLines
+  let lines = reverse reversedLines
   let field = foldl' calcInstruction emptyField lines
-  print $ length $ filter (==1) $ toList field
+  print $ M.size $ M.filter (==True) field
 
 emptyField :: Field
-emptyField = zero 1000 1000
+emptyField = M.empty
 
 calcInstruction :: Field -> String -> Field
 calcInstruction lights str
@@ -27,11 +27,11 @@ calcInstruction lights str
     toggleRegex = mkRegex "toggle ([0-9]+),([0-9]+) through ([0-9]+),([0-9]+)"
 
 doInstruction :: (Field -> Pos -> Field) -> Field -> [Int] -> Field
-doInstruction instr lights [x1,y1,x2,y2] = foldl instr lights [ (x+1,y+1) | x <- [x1..x2], y <- [y1..y2]]
+doInstruction instr lights [x1,y1,x2,y2] = foldl instr lights [ (x,y) | x <- [x1..x2], y <- [y1..y2]]
 
-turnOn field pos = setElem 1 pos field
-turnOff field pos = setElem 0 pos field
-toggle field pos = setElem value pos field
+turnOn field pos = M.insert pos True field
+turnOff field pos = M.insert pos False field
+toggle field pos = M.alter f pos field
   where 
-    value | field ! pos == 0 = 1
-          | field ! pos == 1 = 0
+    f Nothing = Just True
+    f (Just a) = Just $ not a
