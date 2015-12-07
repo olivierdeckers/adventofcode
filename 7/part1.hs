@@ -10,28 +10,33 @@ import Debug.Trace
 main = do
   reversedLines <- readLines
   let lines = reverse reversedLines
-  let instructions = foldl' parseInstruction M.empty lines
-  print instructions
-  print $ eval instructions (Signal (String "a"))
+  print lines
+  --let (instructions = foldl' parseInstruction M.empty lines
+  --print instructions
+  --print $ eval (M.toList instructions) (Signal (String "a"))
 
 test = do 
   let input = ["123 -> x", "456 -> y", "x AND y -> d", "x OR y -> e", "x LSHIFT 2 -> f", "y RSHIFT 2 -> g", "NOT x -> h", "NOT y -> i"]
-  let instructions = foldl parseInstruction M.empty input
-  print instructions
-  print $ eval instructions (Signal (String "f"))
+  let (instructions, assignments) = foldl' parseInstruction (M.empty, M.empty) input
+  --print instructions
+  print $ eval (M.toList instructions) assignments
 
   
 data Signal = String String | Word Word16 deriving Show
-data Instruction = Signal Signal | And Signal Signal | Or Signal Signal | Not Signal | LShift Signal Int | RShift Signal Int deriving (Show)
+data Instruction = Var String | And Signal Signal | Or Signal Signal | Not Signal | LShift Signal Int | RShift Signal Int deriving (Show)
+type Instructions = M.Map String Instruction
+type Assignments = M.Map String Word16
 
-parseInstruction :: M.Map String Instruction -> String -> M.Map String Instruction
-parseInstruction instructions str
-  | Just [a, b] <- matchRegex assignR str = M.insert b (Signal (parseSignal a)) instructions
-  | Just [a, b, c] <- matchRegex andR str = M.insert c (And (parseSignal a) (parseSignal b)) instructions
-  | Just [a, b, c] <- matchRegex orR str = M.insert c (Or (parseSignal a) (parseSignal b)) instructions
-  | Just [a, b] <- matchRegex notR str = M.insert b (Not $ parseSignal a) instructions
-  | Just [a, b, c] <- matchRegex lshiftR str = M.insert c (LShift (parseSignal a) (read b)) instructions
-  | Just [a, b, c] <- matchRegex rshiftR str = M.insert c (RShift (parseSignal a) (read b)) instructions
+parseInstruction :: (Instructions, Assignments) -> String -> (Instructions, Assignments)
+parseInstruction (instructions, assignments) str
+  | Just [a, b] <- matchRegex assignR str = case (parseSignal a) of
+      Word w -> (instructions, M.insert b w assignments)
+      String s -> (M.insert b (Var s) instructions, assignments)
+  | Just [a, b, c] <- matchRegex andR str = (M.insert c (And (parseSignal a) (parseSignal b)) instructions, assignments)
+  | Just [a, b, c] <- matchRegex orR str = (M.insert c (Or (parseSignal a) (parseSignal b)) instructions, assignments)
+  | Just [a, b] <- matchRegex notR str = (M.insert b (Not $ parseSignal a) instructions, assignments)
+  | Just [a, b, c] <- matchRegex lshiftR str = (M.insert c (LShift (parseSignal a) (read b)) instructions, assignments)
+  | Just [a, b, c] <- matchRegex rshiftR str = (M.insert c (RShift (parseSignal a) (read b)) instructions, assignments)
   where
     assignR = mkRegex "^([a-z0-9]+) -> ([a-z]+)$"
     andR = mkRegex "^([a-z0-9]+) AND ([a-z0-9]+) -> ([a-z]+)$"
@@ -48,27 +53,30 @@ parseSignal str
     string = mkRegex "[a-z]+"
     word = mkRegex "[0-9]+"
 
-eval :: M.Map String Instruction -> Instruction -> Word16
-eval instructions (Signal (String a)) | trace a False = 0
-eval instructions (Signal (Word a)) = a
-eval instructions (Signal (String a)) = result -- trace (a ++ ": " ++ (show result))
-  where 
-    Just contents = M.lookup a instructions 
-    result = eval instructions contents
-eval instructions (And a b) = a' .&. b'
-  where
-    a' = eval instructions (Signal a)
-    instructions' = case a of 
-      String str -> M.insert str (Signal (Word a')) instructions
-      otherwise -> instructions
-    b' = eval instructions' (Signal b)
-eval instructions (Or a b) = a' .|. b'
-  where
-    a' = eval instructions (Signal a)
-    instructions' = case a of
-      String str -> M.insert str (Signal (Word a')) instructions
-      otherwise -> instructions
-    b' = eval instructions (Signal b)
-eval instructions (Not a) = complement (eval instructions (Signal a))
-eval instructions (LShift a b) = shiftL (eval instructions (Signal a)) b
-eval instructions (RShift a b) = shiftR (eval instructions (Signal a)) b
+eval :: [(String,Instruction)] -> Assignments -> Assignments
+eval [] results = results
+eval ((key, i):is) results = case i of
+  Var s -> 
+    case M.lookup s results of
+      Just w -> eval is (M.insert key w results)
+      Nothing -> eval (is ++ [(key, i)]) results
+  Not s -> 
+    case M.lookup s results of
+      Just w -> eval is (M.insert key (complement w) results)
+      Nothing -> eval (is ++ [(key, i)]) results
+  LShift s b ->
+    case M.lookup s results of
+      Just w -> eval is (M.insert key (shiftL w b) results)
+      Nothing -> eval (is ++ [(key, i)]) results
+  RShift s b ->
+    case M.lookup s results of
+      Just w -> eval is (M.insert key (shiftR w b) results)
+      Nothing -> eval (is ++ [(key, i)]) results
+  And s1 s2 ->
+    case (M.lookup s1 results, M.lookup s2 results) of
+      (Just w1, Just w2) -> eval is (M.insert key (w1 .&. w2) results)
+      otherwise -> eval (is ++ [(key, i)]) results
+  Or s1 s2 ->
+    case (M.lookup s1 results, M.lookup s2 results) of
+      (Just w1, Just w2) -> eval is (M.insert key (w1 .|. w2) results)
+      otherwise -> eval (is ++ [(key, i)]) results
