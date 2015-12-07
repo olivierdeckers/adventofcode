@@ -49,13 +49,26 @@ parseSignal str
     word = mkRegex "[0-9]+"
 
 eval :: M.Map String Instruction -> Instruction -> Word16
+eval instructions (Signal (String a)) | trace a False = 0
 eval instructions (Signal (Word a)) = a
-eval instructions (Signal (String a)) = trace (a ++ ": " ++ (show result)) result
+eval instructions (Signal (String a)) = result -- trace (a ++ ": " ++ (show result))
   where 
     Just contents = M.lookup a instructions 
     result = eval instructions contents
-eval instructions (And a b) = trace (show (And a b)) $ (eval instructions (Signal a)) .&. (eval instructions (Signal b))
-eval instructions (Or a b) = trace (show (Or a b)) $ (eval instructions (Signal a)) .|. (eval instructions (Signal b))
-eval instructions (Not a) = trace (show (Not a)) $ complement (eval instructions (Signal a))
-eval instructions (LShift a b) = trace (show (LShift a b)) $ shiftL (eval instructions (Signal a)) b
-eval instructions (RShift a b) = trace (show (RShift a b)) $ shiftR (eval instructions (Signal a)) b
+eval instructions (And a b) = a' .&. b'
+  where
+    a' = eval instructions (Signal a)
+    instructions' = case a of 
+      String str -> M.insert str (Signal (Word a')) instructions
+      otherwise -> instructions
+    b' = eval instructions' (Signal b)
+eval instructions (Or a b) = a' .|. b'
+  where
+    a' = eval instructions (Signal a)
+    instructions' = case a of
+      String str -> M.insert str (Signal (Word a')) instructions
+      otherwise -> instructions
+    b' = eval instructions (Signal b)
+eval instructions (Not a) = complement (eval instructions (Signal a))
+eval instructions (LShift a b) = shiftL (eval instructions (Signal a)) b
+eval instructions (RShift a b) = shiftR (eval instructions (Signal a)) b
