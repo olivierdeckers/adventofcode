@@ -1,11 +1,9 @@
-import Data.String
 import Data.List
 import Text.Regex
 import qualified Data.Map.Strict as M
 import AdventCommon
 import Data.Bits
 import Data.Word
-import Debug.Trace
 
 main = do
   reversedLines <- readLines
@@ -19,7 +17,6 @@ test = do
   let (instructions, assignments) = foldl' parseInstruction (M.empty, M.empty) input
   print $ eval (M.toList instructions) assignments
 
-  
 data Signal = String String | Word Word16 deriving Show
 data Instruction = Var String | And Signal Signal | Or Signal Signal | Not Signal | LShift Signal Int | RShift Signal Int deriving (Show)
 type Instructions = M.Map String Instruction
@@ -59,53 +56,25 @@ eval ((key, i):is) results = case i of
       Just w -> eval is (M.insert key w results)
       Nothing -> eval (is ++ [(key, i)]) results
   Not s -> 
-    case s of 
-      Word x -> eval is (M.insert key (complement x) results)
-      String x -> 
-        case M.lookup x results of
-          Just w -> eval is (M.insert key (complement w) results)
-          Nothing -> eval (is ++ [(key, i)]) results
+    case resolveSignal s of 
+      Just w -> eval is (M.insert key (complement w) results)
+      Nothing -> eval (is ++ [(key, i)]) results
   LShift s b ->
-    case s of
-      Word x -> eval is (M.insert key (shiftL x b) results)
-      String x -> 
-        case M.lookup x results of
-          Just w -> eval is (M.insert key (shiftL w b) results)
-          Nothing -> eval (is ++ [(key, i)]) results
+    case resolveSignal s of
+      Just w -> eval is (M.insert key (shiftL w b) results)
+      Nothing -> eval (is ++ [(key, i)]) results
   RShift s b ->
-    case s of 
-      Word x -> eval is (M.insert key (shiftR x b) results)
-      String x ->
-        case M.lookup x results of
-          Just w -> eval is (M.insert key (shiftR w b) results)
-          Nothing -> eval (is ++ [(key, i)]) results
+    case resolveSignal s of 
+      Just w -> eval is (M.insert key (shiftR w b) results)
+      Nothing -> eval (is ++ [(key, i)]) results
   And s1 s2 ->
-    case (s1,s2) of
-      (Word x1, Word x2) -> eval is (M.insert key (x1 .&. x2) results)
-      (Word x1, String x2) -> 
-        case (Just x1, M.lookup x2 results) of
-          (Just w1, Just w2) -> eval is (M.insert key (w1 .&. w2) results)
-          otherwise -> eval (is ++ [(key, i)]) results
-      (String x1, Word x2) ->
-        case (M.lookup x1 results, Just x2) of
-            (Just w1, Just w2) -> eval is (M.insert key (w1 .&. w2) results)
-            otherwise -> eval (is ++ [(key, i)]) results
-      (String x1, String x2) ->
-        case (M.lookup x1 results, M.lookup x2 results) of
-          (Just w1, Just w2) -> eval is (M.insert key (w1 .&. w2) results)
-          otherwise -> eval (is ++ [(key, i)]) results
+    case (resolveSignal s1, resolveSignal s2) of
+      (Just w1, Just w2) -> eval is (M.insert key (w1 .&. w2) results)
+      otherwise -> eval (is ++ [(key, i)]) results
   Or s1 s2 ->
-    case (s1,s2) of
-      (Word x1, Word x2) -> eval is (M.insert key (x1 .|. x2) results)
-      (Word x1, String x2) -> 
-        case (Just x1, M.lookup x2 results) of
-          (Just w1, Just w2) -> eval is (M.insert key (w1 .|. w2) results)
-          otherwise -> eval (is ++ [(key, i)]) results
-      (String x1, Word x2) ->
-        case (M.lookup x1 results, Just x2) of
-            (Just w1, Just w2) -> eval is (M.insert key (w1 .|. w2) results)
-            otherwise -> eval (is ++ [(key, i)]) results
-      (String x1, String x2) ->
-        case (M.lookup x1 results, M.lookup x2 results) of
-          (Just w1, Just w2) -> eval is (M.insert key (w1 .|. w2) results)
-          otherwise -> eval (is ++ [(key, i)]) results
+    case (resolveSignal s1, resolveSignal s2) of
+      (Just w1, Just w2) -> eval is (M.insert key (w1 .|. w2) results)
+      otherwise -> eval (is ++ [(key, i)]) results
+  where
+    resolveSignal (Word w) = Just w
+    resolveSignal (String s) = M.lookup s results
