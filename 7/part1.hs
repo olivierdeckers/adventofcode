@@ -10,15 +10,13 @@ import Debug.Trace
 main = do
   reversedLines <- readLines
   let lines = reverse reversedLines
-  print lines
-  --let (instructions = foldl' parseInstruction M.empty lines
-  --print instructions
-  --print $ eval (M.toList instructions) (Signal (String "a"))
+  let (instructions, assignments) = foldl' parseInstruction (M.empty, M.empty) lines
+  let results = eval (M.toList instructions) assignments
+  print $ M.lookup "a" results
 
 test = do 
   let input = ["123 -> x", "456 -> y", "x AND y -> d", "x OR y -> e", "x LSHIFT 2 -> f", "y RSHIFT 2 -> g", "NOT x -> h", "NOT y -> i"]
   let (instructions, assignments) = foldl' parseInstruction (M.empty, M.empty) input
-  --print instructions
   print $ eval (M.toList instructions) assignments
 
   
@@ -61,22 +59,53 @@ eval ((key, i):is) results = case i of
       Just w -> eval is (M.insert key w results)
       Nothing -> eval (is ++ [(key, i)]) results
   Not s -> 
-    case M.lookup s results of
-      Just w -> eval is (M.insert key (complement w) results)
-      Nothing -> eval (is ++ [(key, i)]) results
+    case s of 
+      Word x -> eval is (M.insert key (complement x) results)
+      String x -> 
+        case M.lookup x results of
+          Just w -> eval is (M.insert key (complement w) results)
+          Nothing -> eval (is ++ [(key, i)]) results
   LShift s b ->
-    case M.lookup s results of
-      Just w -> eval is (M.insert key (shiftL w b) results)
-      Nothing -> eval (is ++ [(key, i)]) results
+    case s of
+      Word x -> eval is (M.insert key (shiftL x b) results)
+      String x -> 
+        case M.lookup x results of
+          Just w -> eval is (M.insert key (shiftL w b) results)
+          Nothing -> eval (is ++ [(key, i)]) results
   RShift s b ->
-    case M.lookup s results of
-      Just w -> eval is (M.insert key (shiftR w b) results)
-      Nothing -> eval (is ++ [(key, i)]) results
+    case s of 
+      Word x -> eval is (M.insert key (shiftR x b) results)
+      String x ->
+        case M.lookup x results of
+          Just w -> eval is (M.insert key (shiftR w b) results)
+          Nothing -> eval (is ++ [(key, i)]) results
   And s1 s2 ->
-    case (M.lookup s1 results, M.lookup s2 results) of
-      (Just w1, Just w2) -> eval is (M.insert key (w1 .&. w2) results)
-      otherwise -> eval (is ++ [(key, i)]) results
+    case (s1,s2) of
+      (Word x1, Word x2) -> eval is (M.insert key (x1 .&. x2) results)
+      (Word x1, String x2) -> 
+        case (Just x1, M.lookup x2 results) of
+          (Just w1, Just w2) -> eval is (M.insert key (w1 .&. w2) results)
+          otherwise -> eval (is ++ [(key, i)]) results
+      (String x1, Word x2) ->
+        case (M.lookup x1 results, Just x2) of
+            (Just w1, Just w2) -> eval is (M.insert key (w1 .&. w2) results)
+            otherwise -> eval (is ++ [(key, i)]) results
+      (String x1, String x2) ->
+        case (M.lookup x1 results, M.lookup x2 results) of
+          (Just w1, Just w2) -> eval is (M.insert key (w1 .&. w2) results)
+          otherwise -> eval (is ++ [(key, i)]) results
   Or s1 s2 ->
-    case (M.lookup s1 results, M.lookup s2 results) of
-      (Just w1, Just w2) -> eval is (M.insert key (w1 .|. w2) results)
-      otherwise -> eval (is ++ [(key, i)]) results
+    case (s1,s2) of
+      (Word x1, Word x2) -> eval is (M.insert key (x1 .|. x2) results)
+      (Word x1, String x2) -> 
+        case (Just x1, M.lookup x2 results) of
+          (Just w1, Just w2) -> eval is (M.insert key (w1 .|. w2) results)
+          otherwise -> eval (is ++ [(key, i)]) results
+      (String x1, Word x2) ->
+        case (M.lookup x1 results, Just x2) of
+            (Just w1, Just w2) -> eval is (M.insert key (w1 .|. w2) results)
+            otherwise -> eval (is ++ [(key, i)]) results
+      (String x1, String x2) ->
+        case (M.lookup x1 results, M.lookup x2 results) of
+          (Just w1, Just w2) -> eval is (M.insert key (w1 .|. w2) results)
+          otherwise -> eval (is ++ [(key, i)]) results
